@@ -417,37 +417,6 @@ zig build run-dashboard
 - Uses POSIX termios for raw mode
 - Tested on common terminals (xterm, gnome-terminal, alacritty, kitty)
 
-## Project Structure
-
-```
-zigtui/
-├── src/
-│   ├── lib.zig           # Main library entry point
-│   ├── backend/
-│   │   ├── mod.zig       # Backend interface
-│   │   ├── windows.zig   # Windows console backend
-│   │   └── ansi.zig      # ANSI/POSIX backend
-│   ├── terminal/
-│   │   └── mod.zig       # Terminal management
-│   ├── render/
-│   │   └── mod.zig       # Buffer and rendering
-│   ├── widgets/
-│   │   ├── mod.zig       # Widget definitions
-│   │   ├── gauge.zig     # Gauge widget
-│   │   ├── list.zig      # List widget
-│   │   └── table.zig     # Table widget
-│   ├── style/
-│   │   └── mod.zig       # Colors and styles
-│   ├── layout/
-│   │   └── mod.zig       # Layout system
-│   └── events/
-│       └── mod.zig       # Event handling
-├── examples/
-│   └── dashboard.zig     # System monitor dashboard
-├── build.zig             # Build configuration
-└── README.md
-```
-
 ## License
 
 MIT License - See LICENSE file for details.

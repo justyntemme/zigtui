@@ -83,8 +83,11 @@ extern "kernel32" fn SetConsoleOutputCP(
 ) callconv(.winapi) BOOL;
 
 // Input record structures for reading console input
+// Note: Windows INPUT_RECORD has 2 bytes of padding after EventType
+// to align the Event union to a 4-byte boundary
 const INPUT_RECORD = extern struct {
     EventType: WORD,
+    _padding: u16 = 0, // Explicit padding for proper alignment
     Event: extern union {
         KeyEvent: KEY_EVENT_RECORD,
         MouseEvent: MOUSE_EVENT_RECORD,
@@ -260,8 +263,12 @@ pub const WindowsBackend = struct {
         stdin_mode &= ~ENABLE_LINE_INPUT;
         stdin_mode &= ~ENABLE_ECHO_INPUT;
         stdin_mode &= ~ENABLE_PROCESSED_INPUT;
+        stdin_mode &= ~ENABLE_VIRTUAL_TERMINAL_INPUT;
         stdin_mode |= ENABLE_WINDOW_INPUT;
-        stdin_mode |= ENABLE_VIRTUAL_TERMINAL_INPUT;
+        // Note: We explicitly disable ENABLE_VIRTUAL_TERMINAL_INPUT above.
+        // When enabled, Windows translates special keys (arrows, Tab, etc.) into
+        // ANSI escape sequences instead of providing virtual key codes directly.
+        // We want raw virtual key codes so we can handle them in pollEvent.
         _ = kernel32.SetConsoleMode(self.stdin_handle, stdin_mode);
 
         // Enable virtual terminal processing for stdout (ANSI escape sequences)

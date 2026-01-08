@@ -19,8 +19,8 @@ const termios = if (is_posix) std.posix.termios else void;
 
 pub const AnsiBackend = struct {
     allocator: Allocator,
-    stdin: std.fs.File,
-    stdout: std.fs.File,
+    stdin: std.io.File,
+    stdout: std.io.File,
     original_termios: if (is_posix) std.posix.termios else void,
     in_raw_mode: bool = false,
     in_alternate_screen: bool = false,
@@ -31,8 +31,8 @@ pub const AnsiBackend = struct {
             return error.UnsupportedTerminal; // Use windows.zig backend instead
         }
 
-        const stdin = std.fs.File.stdin();
-        const stdout = std.fs.File.stdout();
+        const stdin = std.io.getStdIn();
+        const stdout = std.io.getStdOut();
 
         // Save original terminal settings
         const original = if (is_posix) try posix.tcgetattr(stdin.handle) else {};

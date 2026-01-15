@@ -355,6 +355,8 @@ Available colors:
 
 *Showcase of built-in themes - Switch between 15 beautiful themes on the fly*
 
+**Try it yourself:** Run `zig build run-themes` to see all themes in action!
+
 ZigTUI includes 15 built-in themes for consistent, beautiful styling. Each theme provides semantic colors for all UI elements:
 
 ```zig
@@ -484,6 +486,9 @@ zig build run-dashboard
 
 # Run the Kitty Graphics demo
 zig build run-kitty
+
+# Run the themes demo
+zig build run-themes
 ```
 
 ## Graphics Support

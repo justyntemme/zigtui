@@ -1,123 +1,61 @@
 # ZigTUI
 
-A Terminal User Interface (TUI) library for Zig, inspired by Ratatui. Build beautiful, interactive terminal applications with a simple, composable API.
+Cross-platform TUI library for Zig, inspired by [Ratatui](https://github.com/ratatui/ratatui).
 
-**The first full-featured cross-platform TUI framework for Zig - works seamlessly on Windows and Linux.**
-
-![ZigTUI System Monitor Dashboard](dashboard.gif)
-
-*System Monitor Dashboard Example - Real-time CPU, memory, disk usage with interactive process list and CPU history sparkline*
+![ZigTUI Dashboard](dashboard.gif)
 
 ## Features
 
-- Cross-platform support (Windows, Linux, macOS)
-- Cell-based rendering with diff algorithm for efficient updates
-- Constraint-based layouts
-- Composable widgets (Block, Paragraph, List, Gauge, Table)
-- Keyboard and mouse event handling
-- ANSI color and text styling support
-- **Built-in themes** (Nord, Dracula, Gruvbox, Catppuccin, Tokyo Night, and more)
-- Kitty Graphics Protocol for image display
-- Unicode block fallback for terminals without graphics support
-- Explicit memory management (no hidden allocations)
+- **Cross-platform** — Windows, Linux, macOS
+- **Efficient rendering** — Cell-based diffing, only redraws what changed
+- **Widgets** — Block, Paragraph, List, Gauge, Table
+- **15 built-in themes** — Nord, Dracula, Gruvbox, Catppuccin, Tokyo Night...
+- **Kitty Graphics Protocol** — Display images (with Unicode fallback)
+- **No hidden allocations** — Explicit memory management
 
 ## Requirements
 
-- Zig 0.15.0 or later
-- Windows 10+ or Linux with a terminal that supports ANSI escape sequences
+- Zig 0.15.0+
+- Windows 10+ / Linux / macOS
 
 ## Installation
-
-### Option 1: Zig fetch
-
-Fetch the zigTUI module:
 
 ```bash
 zig fetch --save git+https://github.com/adxdits/zigtui.git
 ```
 
-Then in your `build.zig`:
-
 ```zig
-const std = @import("std");
+// build.zig
+const zigtui = b.dependency("zigtui", .{ .target = target, .optimize = optimize });
 
-pub fn build(b: *std.Build) void {
-    const target = b.standardTargetOptions(.{});
-    const optimize = b.standardOptimizeOption(.{});
-
-    // Import ZigTUI module
-    const zigtui = b.dependency("zigtui", .{
+const exe = b.addExecutable(.{
+    .name = "myapp",
+    .root_module = b.createModule(.{
+        .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
-    });
-
-    // Your executable
-    const exe = b.addExecutable(.{
-        .name = "myapp",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/main.zig"),
-            .target = target,
-            .optimize = optimize,
-            .imports = &.{
-                .{ .name = "zigtui", .module = zigtui.module("zigtui") },
-            },
-        }),
-    });
-
-    b.installArtifact(exe);
-}
+        .imports = &.{
+            .{ .name = "zigtui", .module = zigtui.module("zigtui") },
+        },
+    }),
+});
 ```
 
-### Option 2: Git Submodule
-
-Add ZigTUI as a submodule to your project:
+<details>
+<summary>Alternative: Git submodule</summary>
 
 ```bash
-git submodule add https://github.com/yourusername/zigtui.git libs/zigtui
+git submodule add https://github.com/adxdits/zigtui.git libs/zigtui
 ```
-
-Then in your `build.zig`:
 
 ```zig
-const std = @import("std");
-
-pub fn build(b: *std.Build) void {
-    const target = b.standardTargetOptions(.{});
-    const optimize = b.standardOptimizeOption(.{});
-
-    // Import ZigTUI module
-    const zigtui_module = b.addModule("zigtui", .{
-        .root_source_file = b.path("libs/zigtui/src/lib.zig"),
-    });
-
-    // Your executable
-    const exe = b.addExecutable(.{
-        .name = "myapp",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/main.zig"),
-            .target = target,
-            .optimize = optimize,
-            .imports = &.{
-                .{ .name = "zigtui", .module = zigtui_module },
-            },
-        }),
-    });
-
-    b.installArtifact(exe);
-}
+const zigtui_module = b.addModule("zigtui", .{
+    .root_source_file = b.path("libs/zigtui/src/lib.zig"),
+});
 ```
-
-### Option 3: Copy Source Files
-
-Copy the `src/` folder into your project and import directly:
-
-```zig
-const tui = @import("path/to/zigtui/src/lib.zig");
-```
+</details>
 
 ## Quick Start
-
-Here is a minimal example that displays a box and exits when you press 'q':
 
 ```zig
 const std = @import("std");
@@ -128,460 +66,114 @@ pub fn main() !void {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    // Initialize backend (platform-specific)
-    var backend = if (@import("builtin").os.tag == .windows)
-        try tui.backend.WindowsBackend.init(allocator)
-    else
-        try tui.backend.AnsiBackend.init(allocator);
+    var backend = try tui.backend.init(allocator);
     defer backend.deinit();
 
-    // Initialize terminal
     var terminal = try tui.terminal.Terminal.init(allocator, backend.interface());
     defer terminal.deinit();
 
-    // Hide cursor
     try terminal.hideCursor();
+    defer terminal.showCursor() catch {};
 
-    // Main loop
     var running = true;
     while (running) {
-        // Poll for events (100ms timeout)
         const event = try backend.interface().pollEvent(100);
-
-        // Handle input
-        switch (event) {
-            .key => |key| {
-                switch (key.code) {
-                    .char => |c| {
-                        if (c == 'q') running = false;
-                    },
-                    .esc => running = false,
-                    else => {},
-                }
-            },
-            else => {},
+        if (event == .key) {
+            if (event.key.code == .esc or (event.key.code == .char and event.key.code.char == 'q'))
+                running = false;
         }
 
-        // Draw UI
         try terminal.draw({}, struct {
             fn render(_: void, buf: *tui.render.Buffer) !void {
-                const area = buf.getArea();
-                const block = tui.widgets.Block{
-                    .title = "Hello ZigTUI - Press 'q' to quit",
+                tui.widgets.Block{
+                    .title = "Hello ZigTUI — press 'q' to quit",
                     .borders = tui.widgets.Borders.all(),
-                    .border_style = tui.style.Style{ .fg = .cyan },
-                };
-                block.render(area, buf);
+                    .border_style = .{ .fg = .cyan },
+                }.render(buf.getArea(), buf);
             }
         }.render);
     }
-
-    try terminal.showCursor();
 }
 ```
 
-## API Reference
-
-### Backend
-
-The backend handles platform-specific terminal operations. The library automatically selects the correct backend for your platform:
+## Widgets
 
 ```zig
-// Automatic platform detection (recommended)
-var backend = try tui.backend.init(allocator);
-defer backend.deinit();
+// Block — container with border/title
+tui.widgets.Block{ .title = "Panel", .borders = tui.widgets.Borders.all() }
+
+// Paragraph — text display
+tui.widgets.Paragraph{ .text = "Hello!", .wrap = true }
+
+// List — scrollable items
+tui.widgets.List{ .items = &items, .selected = 0, .highlight_style = .{ .bg = .blue } }
+
+// Gauge — progress bar
+tui.widgets.Gauge{ .ratio = 0.75, .label = "75%" }
+
+// Table — tabular data
+tui.widgets.Table{ .header = &columns, .rows = &rows }
 ```
 
-You can also use the `NativeBackend` type alias if you need the type explicitly:
+## Themes
+
+![Themes](theme.gif)
 
 ```zig
-var backend: tui.backend.NativeBackend = try tui.backend.init(allocator);
-```
+const theme = tui.themes.catppuccin_mocha;
 
-Or select a specific backend manually if needed:
-
-```zig
-// Windows only
-var backend = try tui.backend.WindowsBackend.init(allocator);
-
-// Linux/macOS only
-var backend = try tui.backend.AnsiBackend.init(allocator);
-```
-
-### Terminal
-
-The terminal manages the screen buffer and rendering:
-
-```zig
-var terminal = try tui.terminal.Terminal.init(allocator, backend.interface());
-defer terminal.deinit();
-
-// Draw a frame
-try terminal.draw(context, renderFunction);
-
-// Cursor control
-try terminal.hideCursor();
-try terminal.showCursor();
-try terminal.setCursor(x, y);
-
-// Get terminal size
-const size = try terminal.getSize();
-```
-
-### Events
-
-Poll for keyboard, mouse, and resize events:
-
-```zig
-const event = try backend.interface().pollEvent(timeout_ms);
-
-switch (event) {
-    .key => |key| {
-        // key.code: KeyCode (.char, .enter, .esc, .up, .down, .left, .right, etc.)
-        // key.modifiers: KeyModifiers (.ctrl, .alt, .shift)
-    },
-    .resize => |size| {
-        // size.width, size.height
-    },
-    .focus_gained => {},
-    .focus_lost => {},
-    .none => {},
-    else => {},
-}
-```
-
-### Widgets
-
-#### Block
-
-A container with optional border and title:
-
-```zig
-const block = tui.widgets.Block{
-    .title = "My Title",
-    .borders = tui.widgets.Borders.all(),  // or .none(), .TOP, .BOTTOM, etc.
-    .style = tui.style.Style{ .fg = .white, .bg = .black },
-    .border_style = tui.style.Style{ .fg = .cyan },
-    .title_style = tui.style.Style{ .fg = .yellow },
-};
-block.render(area, buf);
-```
-
-#### Paragraph
-
-Display text with optional wrapping:
-
-```zig
-const paragraph = tui.widgets.Paragraph{
-    .text = "Hello, world!",
-    .style = tui.style.Style{ .fg = .white },
-    .wrap = true,
-};
-paragraph.render(area, buf);
-```
-
-#### List
-
-A scrollable list of items:
-
-```zig
-const items = [_]tui.widgets.ListItem{
-    .{ .content = "Item 1" },
-    .{ .content = "Item 2" },
-    .{ .content = "Item 3" },
-};
-const list = tui.widgets.List{
-    .items = &items,
-    .selected = 0,
-    .highlight_style = tui.style.Style{ .bg = .blue },
-};
-list.render(area, buf);
-```
-
-#### Gauge
-
-A progress bar:
-
-```zig
-const gauge = tui.widgets.Gauge{
-    .ratio = 0.75,  // 0.0 to 1.0
-    .label = "75%",
-    .gauge_style = tui.style.Style{ .fg = .green },
-};
-gauge.render(area, buf);
-```
-
-#### Table
-
-Display tabular data:
-
-```zig
-const table = tui.widgets.Table{
-    .header = &[_]tui.widgets.Column{
-        .{ .title = "Name", .width = 20 },
-        .{ .title = "Value", .width = 10 },
-    },
-    .rows = &rows,
-};
-table.render(area, buf);
-```
-
-### Styles
-
-Apply colors and text modifiers:
-
-```zig
-const style = tui.style.Style{
-    .fg = .red,           // Foreground color
-    .bg = .black,         // Background color
-    .modifier = tui.style.Modifier{
-        .bold = true,
-        .italic = true,
-        .underlined = true,
-    },
-};
-```
-
-Available colors:
-- Basic: `.black`, `.red`, `.green`, `.yellow`, `.blue`, `.magenta`, `.cyan`, `.white`, `.gray`
-- Light variants: `.light_red`, `.light_green`, `.light_yellow`, `.light_blue`, `.light_magenta`, `.light_cyan`
-- RGB: `.{ .rgb = .{ .r = 255, .g = 128, .b = 0 } }`
-- Indexed (256 colors): `.{ .indexed = 42 }`
-- Reset to default: `.reset`
-
-### Themes
-
-![ZigTUI Themes Demo](theme.gif)
-
-*Showcase of built-in themes - Switch between 15 beautiful themes on the fly*
-
-**Try it yourself:** Run `zig build run-themes` to see all themes in action!
-
-ZigTUI includes 15 built-in themes for consistent, beautiful styling. Each theme provides semantic colors for all UI elements:
-
-```zig
-const tui = @import("zigtui");
-const themes = tui.themes;
-
-// Use a built-in theme
-const theme = themes.catppuccin_mocha;
-
-// Apply theme styles to widgets
-const block = tui.widgets.Block{
+tui.widgets.Block{
     .title = "Dashboard",
-    .borders = tui.widgets.Borders.all(),
     .style = theme.baseStyle(),
     .border_style = theme.borderFocusedStyle(),
-    .title_style = theme.titleStyle(),
 };
-
-// Use semantic colors
-const success_msg = theme.successStyle();  // Green-ish color
-const error_msg = theme.errorStyle();      // Red-ish color
-const info_msg = theme.infoStyle();        // Blue-ish color
-
-// Smart gauge coloring based on percentage
-const gauge_style = theme.gaugeStyle(85);  // Warning color at 85%
-
-// List item styling with selection state
-const item_style = theme.listItemStyle(selected, focused);
-
-// Table styling
-const header_style = theme.tableHeaderStyle();
-const row_style = theme.tableRowStyle(row_index, is_selected);
 ```
 
-**Available themes:**
+**Available:** `default`, `nord`, `dracula`, `monokai`, `gruvbox_dark`, `gruvbox_light`, `solarized_dark`, `solarized_light`, `tokyo_night`, `catppuccin_mocha`, `catppuccin_latte`, `one_dark`, `cyberpunk`, `matrix`, `high_contrast`
 
-| Theme | Description |
-|-------|-------------|
-| `themes.default` | Balanced dark theme with cyan accents |
-| `themes.nord` | Arctic, north-bluish color palette |
-| `themes.dracula` | Dark theme with vibrant colors |
-| `themes.monokai` | Refined Monokai color palette |
-| `themes.gruvbox_dark` | Retro groove color scheme (dark) |
-| `themes.gruvbox_light` | Retro groove color scheme (light) |
-| `themes.solarized_dark` | Precision colors (dark) |
-| `themes.solarized_light` | Precision colors (light) |
-| `themes.tokyo_night` | Clean dark theme inspired by Tokyo city lights |
-| `themes.catppuccin_mocha` | Soothing pastel theme (dark) |
-| `themes.catppuccin_latte` | Soothing pastel theme (light) |
-| `themes.one_dark` | Atom's iconic dark theme |
-| `themes.cyberpunk` | Neon colors on dark background |
-| `themes.matrix` | Classic green-on-black hacker aesthetic |
-| `themes.high_contrast` | Maximum readability |
-
-**Theme utilities:**
-
-```zig
-// Get theme by name (case-insensitive)
-if (themes.getByName("dracula")) |theme| {
-    // Use the theme
-}
-
-// Iterate all themes (useful for theme picker)
-for (themes.all_themes) |theme| {
-    std.debug.print("{s}: {s}\n", .{ theme.name, theme.description });
-}
-
-// Get theme names array
-const names = themes.getThemeNames();
-```
-
-### Buffer Operations
-
-Direct buffer manipulation:
-
-```zig
-// Set a character at position
-buf.setChar(x, y, 'X', style);
-
-// Set a string at position
-buf.setString(x, y, "Hello", style);
-
-// Fill an area
-buf.fillArea(rect, ' ', style);
-
-// Get a cell
-if (buf.get(x, y)) |cell| {
-    cell.char = 'A';
-    cell.setStyle(style);
-}
-```
-
-### Layout
-
-Use the Rect structure for positioning:
-
-```zig
-const area = tui.render.Rect{
-    .x = 0,
-    .y = 0,
-    .width = 40,
-    .height = 10,
-};
-
-// Get inner area with margin
-const inner = area.inner(1);
-
-// Split horizontally
-const split = area.splitHorizontal(20);
-// split.left, split.right
-
-// Split vertically
-const vsplit = area.splitVertical(5);
-// vsplit.top, vsplit.bottom
-```
+Run `zig build run-themes` to preview all themes.
 
 ## Examples
 
-Build and run the examples:
-
 ```bash
-# Build all examples
-zig build examples
-
-# Run the system monitor dashboard
-zig build run-dashboard
-
-# Run the Kitty Graphics demo
-zig build run-kitty
-
-# Run the themes demo
-zig build run-themes
+zig build run-dashboard   # System monitor demo
+zig build run-kitty       # Image display demo  
+zig build run-themes      # Theme showcase
 ```
 
-## Graphics Support
+## Kitty Graphics
 
-ZigTUI includes support for displaying images in the terminal using the Kitty Graphics Protocol.
-
-### Kitty Graphics Protocol
-
-The Kitty Graphics Protocol allows terminals to display true images (PNG, BMP, raw pixel data) directly in the terminal. When the terminal does not support this protocol, ZigTUI automatically falls back to rendering images using Unicode block characters.
-
-### Usage
+Display images in terminals that support the [Kitty Graphics Protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/). Falls back to Unicode blocks automatically.
 
 ```zig
-const tui = @import("zigtui");
-
-// Initialize graphics with auto-detection
 var gfx = tui.Graphics.init(allocator);
 defer gfx.deinit();
 
-// Detect terminal capabilities
-const mode = gfx.detect();
-
-// Load a BMP image
 var bmp = try tui.graphics.bmp.loadFile(allocator, "image.bmp");
+const image = tui.Image{ .data = bmp.data, .width = bmp.width, .height = bmp.height, .format = .rgba };
 
-const image = tui.Image{
-    .data = bmp.data,
-    .width = bmp.width,
-    .height = bmp.height,
-    .format = .rgba,
-    .stride = 4,
-};
-
-// Display based on terminal support
 if (gfx.supportsImages()) {
-    // Terminal supports Kitty Graphics - send escape sequence
-    if (try gfx.drawImage(image, .{ .x = 0, .y = 0 })) |seq| {
-        try backend.write(seq);
-    }
+    if (try gfx.drawImage(image, .{ .x = 0, .y = 0 })) |seq| try backend.write(seq);
 } else {
-    // Fallback - render using Unicode half-blocks
-    gfx.renderImageToBuffer(image, buffer, area);
+    gfx.renderImageToBuffer(image, buffer, area); // Unicode fallback
 }
 ```
 
-### Supported Image Formats
+**Supported:** Kitty, WezTerm, foot, Konsole (partial)  
+**Fallback:** Windows Terminal, iTerm2, Terminal.app
 
-| Format | Kitty Protocol | Fallback Mode |
-|--------|----------------|---------------|
-| BMP (24/32-bit) | Yes | Yes (built-in decoder) |
-| PNG | Yes | No (requires external decoder) |
-| Raw RGBA | Yes | Yes |
+## Platform Support
 
-## Platform Notes
-
-### Windows
-
-- Requires Windows 10 or later for Virtual Terminal support
-- Uses native Windows Console API for input handling
-- ANSI escape sequences are enabled automatically
-- Windows Terminal does not support Kitty Graphics Protocol
-- For image display on Windows, use WezTerm or the Unicode block fallback
-
-### Linux
-
-- Works with any terminal that supports ANSI escape sequences
-- Uses POSIX termios for raw mode
-- Kitty Graphics supported in: Kitty, WezTerm, Konsole (partial)
-- Tested on common terminals (xterm, gnome-terminal, alacritty, kitty)
-
-### macOS
-
-- Works with terminals that support ANSI escape sequences
-- Uses POSIX termios for raw mode
-- Kitty Graphics supported in: Kitty, WezTerm
-- Terminal.app and iTerm2 do not support Kitty Graphics (use fallback)
-
-### Terminal Graphics Support
-
-| Terminal | Platform | Kitty Graphics |
-|----------|----------|----------------|
-| Kitty | Linux, macOS | Full support |
-| WezTerm | Windows, Linux, macOS | Full support |
-| Konsole | Linux | Partial support |
-| foot | Linux (Wayland) | Full support |
-| Windows Terminal | Windows | Not supported (use fallback) |
-| iTerm2 | macOS | Not supported (use fallback) |
-| Terminal.app | macOS | Not supported (use fallback) |
+| Platform | Terminal | Notes |
+|----------|----------|-------|
+| Windows 10+ | Windows Terminal, WezTerm | Native Console API |
+| Linux | Any ANSI-compatible | POSIX termios |
+| macOS | Kitty, WezTerm, Terminal.app | POSIX termios |
 
 ## License
 
-MIT License - See LICENSE file for details.
+MIT
 
 ## Contributing
 
-Contributions are welcome. Please open an issue or submit a pull request.
+Issues and PRs welcome.
